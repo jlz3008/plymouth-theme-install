@@ -6,10 +6,10 @@ install software or make maintenance operations.
 
 ## Main Idea
 
-1.- Prepare some Screens to prompt information from user.
-2.- Navigate from Screens and make the process.
-3.- Inform to user about progress of process.
-4.- Configure script.
+1. Prepare some Screens to prompt information from user.
+2. Navigate from Screens and make the process.
+3. Inform to user about progress of process.
+4. Configure script.
 
 ## Prepare some Screens to prompt information from user
 
@@ -80,11 +80,12 @@ at the end of script text.
 
 # Example test
 
-There is a complete example on *test* bash script file.
+There is a complete example on [test]( https://github.com/jlz3008/plymouth-theme-install/blob/master/test) bash script file.
 
 # Acknowledgement
 
 Blue Progress Bar from Rich Tabor http://purtypixels.com/tiny-sliders-psd/
+
 Bee  Progress Bar stolen from https://dribbble.com/shots/198056-Bee-progress-bar to Andrew Ckor https://dribbble.com/andrewckor
 
 # External links
