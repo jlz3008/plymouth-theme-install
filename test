@@ -1,0 +1,154 @@
+#!/bin/bash
+plymouth show-splash
+
+#-----------------------------------------------------------------------------------
+function LoadConfirmHD()
+{
+  plymouth message --text="hide:"
+  plymouth update --status="confirm_hd"
+  plymouth message --text="" 
+  plymouth message --text="title:You have selected"
+  plymouth message --text="big:$1"
+  plymouth message --text="question:Confirm please [Y/N]"
+  plymouth message --text="show:"
+}
+#-----------------------------------------------------------------------------------
+function SelectHD()
+{
+  declare -a disks
+
+  plymouth update --status="select_hd"
+  plymouth message --text="" 
+  plymouth message --text="title:Found disks"
+  plymouth message --text="leftAlign:-2"
+  export counter=0
+  export key=""
+
+  IFS=$'\r\n' GLOBIGNORE='*'  disks=($(lsblk -no NAME,SIZE,MODEL,TYPE | awk 'BEGIN {select=1}  /disk/ {printf "%d%s%- 8s %-6s %-20s\n",select,".- ",$1,$2,$3 } !/disk/ && !/rom/ {printf "      %-8s %-6s\n",$1,$2 } /disk/ {select++}'))
+
+  for i in $(seq 0 $((${#disks[@]} - 1)))
+  do
+    disk=${disks[$i]}
+    if echo "$disk" | egrep -q "^[[:digit:]]\.-"
+    then
+      let counter=$counter+1
+      keys="$keys$counter"
+    fi
+    plymouth message --text="$disk"
+  done 
+
+  plymouth message --text="question:Select the disk to install [1..$counter]"
+
+  while true
+  do
+    plymouth message --text="hide:"
+    plymouth update --status="select_hd"
+    plymouth message --text="show:"
+    option=$(plymouth watch-keystroke --keys="$keys")
+
+ # Find disk description
+    
+    for i in $(seq 0 $((${#disks[@]} - 1)))
+    do
+      disk=${disks[$i]}
+      if echo "$disk" | egrep -q "^${option}.-"
+      then
+	  disk_desc="$disk"
+	  break
+      fi
+    done
+
+    LoadConfirmHD "$disk"
+    
+    plymouth update --status="select_hd"
+    confirm=$(plymouth watch-keystroke --keys="yYnN")
+
+    if [ "$confirm" = "y" -o "$confirm" = "Y" ]
+    then
+      break
+    fi
+  done
+
+}
+#-----------------------------------------------------------------------------------
+function LoadInstallingSystem()
+{
+  plymouth message --text="hide:"
+  plymouth update --status="installing_system"
+  plymouth message --text="" 
+  plymouth message --text="title:Installing the system"
+  plymouth message --text="question:Wait to finalize the system installation."
+  plymouth message --text="show:"
+}
+#-----------------------------------------------------------------------------------
+function LoadConfirmFirmware()
+{
+  plymouth message --text="hide:"
+  plymouth update --status="confirm_firmware"
+  plymouth message --text="" 
+  plymouth message --text="title:A new firmware is detected"
+  plymouth message --text="question:Do you want install the firmware [Y/N]"
+  plymouth message --text="show:"
+}
+
+#-----------------------------------------------------------------------------------
+function LoadInstallingFirmware()
+{
+  plymouth message --text="hide:"
+  plymouth update --status="installing_firmware"
+  plymouth message --text="" 
+  plymouth message --text="title:Installing the firmware"
+  plymouth message --text="question:Wait to finalize the system installation."
+  plymouth message --text="show:"
+}
+
+#-----------------------------------------------------------------------------------
+function LoadEndScreen()
+{
+  plymouth message --text="hide:"
+  plymouth update --status="end_screen"
+  plymouth message --text="" 
+  plymouth message --text="title:Installation is finished"
+  plymouth message --text="question:Pull out the stick and press any key."
+  plymouth message --text="show:"
+}
+
+#-----------------------------------------------------------------------------------
+# Main 
+#-----------------------------------------------------------------------------------
+
+  SelectHD
+
+  echo Option selected = $option
+
+  LoadInstallingSystem
+
+  for i in $(seq 0 10 100)
+  do
+    plymouth message --text="progress.set:$i"
+    sleep 1
+  done
+  plymouth message --text="progress.hide:"
+
+
+  LoadConfirmFirmware
+  confirm=$(plymouth watch-keystroke --keys="yYnN")
+  if [ "$confirm" = "y" -o "$confirm" = "Y" ]
+  then
+    LoadInstallingFirmware
+    for i in $(seq 0 10 100)
+    do
+      plymouth message --text="progress.set:$i"
+      sleep 1
+    done
+    plymouth message --text="progress.hide:"
+  fi
+
+  LoadEndScreen
+  sleep 10
+
+  plymouth message --text="hide:"
+
+plymouth hide-splash
+
+

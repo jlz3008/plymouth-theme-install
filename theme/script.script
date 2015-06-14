@@ -1,0 +1,928 @@
+// The Process Installation Plytmouth Theme (TPIPT)
+//
+// This plymouth theme is oriented to ease the creation of
+// USB sticks for proccess as installation, check process 
+// width Syslinux.
+//
+// Please read the Readme file 
+
+
+//-----------------------------------------------------
+//--------------- Overload Window object --------------
+//-----------------------------------------------------
+
+/** --------------------------------------------
+ * Helper overload to apply background colors from 
+ * global.palette to the Window
+ */
+Window.ApplyBackgroundColors = fun() {
+    Window.SetBackgroundTopColor(palette.background.top.red,
+                                 palette.background.top.green,
+                                 palette.background.top.blue);
+    Window.SetBackgroundBottomColor(palette.background.bottom.red,
+                                    palette.background.bottom.green,
+                                    palette.background.bottom.blue);
+};
+
+//---------------------------------------------------------------------------
+// ------------------------------- Classes ---------------------------------- 
+//---------------------------------------------------------------------------
+
+// -------------------------------- Fonts ---------------------------------- 
+/**
+ * General purpouse Font/Color container to hold colors, opacity and font size
+ */
+Font = fun(red, green, blue,opacity,font) {
+    local.color = [];
+    color.red = red;
+    color.green = green;
+    color.blue = blue;
+    color.opacity = opacity;
+    color.font = font;
+    return color | global.Font;
+} | [];
+
+/** ----------------------------------------------
+ * General purpose function to create an image from a string.
+ * \param text the string to print
+ * \param f the Font to write the string 
+ * \returns Image containg the text
+ */
+fun WriteText(text, f) 
+{
+    return Image.Text(text, f.red, f.green, f.blue,f.opacity, f.font);
+}
+
+/** Create regular text image. \see WriteText */
+fun ImageFromNormalText (text) 
+{
+    return WriteText(text, palette.text.normal);
+}
+
+String.ToImage = fun() {
+    return WriteText(this, palette.text.normal);
+};
+
+/** Create regular text image. \see WriteText */
+fun ImageFromBigText (text) 
+{
+    return WriteText(text, palette.text.big);
+}
+
+/** Create title text image. \see WriteText */
+fun ImageFromTitleText (text) 
+{
+    return WriteText(text, palette.text.title);
+}
+
+/** Create question text image. \see WriteText */
+fun ImageFromQuestionText (text) 
+{
+    return WriteText(text, palette.text.question);
+}
+
+//---------------------------------------------------------------------------
+// --------------------------------- Debug ---------------------------------- 
+//---------------------------------------------------------------------------
+debug_console.lines = [];
+debug_console.numLines=0;
+debug_console.maxLines=50;
+
+fun Debug(text) 
+{
+    local.i=0;
+    if(debug_console.numLines >= debug_console.maxLines)
+    {
+// Scroll up      
+      for(i=1; i < debug_console.numLines;i++)
+      {
+	  debug_console.lines[i].sprite.SetPosition(0, (i-1) * debug_console.lines[i].image.GetHeight() , 1);
+	  debug_console.lines[i-1].image = debug_console.lines[i].image;
+	  debug_console.lines[i-1].sprite = debug_console.lines[i].sprite;
+      }
+    }
+    else	
+      debug_console.numLines++;
+    
+    i=debug_console.numLines-1;
+    
+    debug_console.lines[i].image = ImageFromNormalText(text);
+    debug_console.lines[i].sprite=Sprite();
+    debug_console.lines[i].sprite.SetImage(debug_console.lines[i].image);
+    debug_console.lines[i].sprite.SetPosition(0, i * debug_console.lines[i].image.GetHeight() , 1);
+}
+
+//----------------------------------------------------------------------
+// --------------------------------- String ----------------------------
+//----------------------------------------------------------------------
+fun StringString(string, substring) 
+{
+    start = 0;
+    while (String(string).CharAt (start)) 
+    {
+        walk = 0;
+        while (String(substring).CharAt (walk) == String(string).CharAt (start + walk) ) 
+	{
+            walk++;
+            if (!String(substring).CharAt (walk)) return start;
+        }
+        start++;
+    }
+
+    return NULL;
+}
+//----------------------------------------------------------------------
+fun StringLength (string) 
+{
+    index = 0;
+    while (String(string).CharAt(index))
+        index++;
+    return index;
+}
+//----------------------------------------------------------------------
+fun StringCopy (source, beginning, end) 
+{
+    local.destination = "";
+    for (index = beginning; ( ( (end == NULL) || (index <= end) ) && (String(source).CharAt(index)) ); index++) {
+        local.destination += String(source).CharAt(index);
+    }
+    
+    return local.destination;
+}
+//----------------------------------------------------------------------
+fun StringReplace (source, pattern, replacement) 
+{
+    local.found = StringString(source, pattern);
+    if (local.found == NULL) 
+    {
+        return source;
+    }
+
+    local.new_string = StringCopy (source, 0, local.found - 1) +
+                       replacement +
+                       StringCopy (source, local.found + StringLength(pattern), NULL);
+
+    return local.new_string;
+}
+//----------------------------------------------------------------------
+fun DigitToInteger (charac) 
+{
+  
+  local.Result = 9;
+  
+  for(Result = 9; Result >= 0;Result--)
+    if( Result+"" == charac)
+      break;
+  return Result;
+}  
+//----------------------------------------------------------------------
+fun StringToInteger (str) 
+{
+    local.Result = -1;
+    local.mult=1;
+
+    if(str.CharAt(0) == "-")
+    {
+      local.mult=-1;
+      str = StringCopy(str,1);
+    }
+    
+    while(StringLength(str) > 0)
+    {
+      local.digit=str.CharAt(0);
+      local.numDigit=DigitToInteger(local.digit);
+      
+      if(local.numDigit == -1)
+	break;
+      
+      if(Result == -1)
+	Result = local.numDigit;
+      else
+	Result = (Result * 10) + local.numDigit;
+      
+      str = StringCopy(str,1);
+    }
+
+    if( Result != -1)
+      Result *= local.mult;
+    
+    return Result;
+}
+
+//-----------------------------------------------------
+//------------------Class Scene--------------------------
+//-----------------------------------------------------
+
+Scene = fun(x,y,width,height) 
+{
+    local.scene.x =x;
+    local.scene.y = y;
+    local.scene.width = width;
+    local.scene.height = height;
+    
+    return scene | global.Scene;
+} | [];
+
+//-----------------------------------------------------
+//------------------Class Screen--------------------------
+//-----------------------------------------------------
+// A screen has a title, a question and lines of text.
+// 
+
+Screen = fun(id,scene) 
+{
+    local.screen = [];
+    
+    screen.id = id;
+    screen.scene = scene;
+    
+    screen.title.x=0;
+    screen.title.y=0;
+    screen.question.x=0;
+    screen.question.y=0;
+    screen.lines=[];
+    screen.numLines=0;
+// use a fixed string with ascending and descending stems to calibrate the
+// bounding box for the first message, so the messages below don't move up
+// and down according to *their* height.
+    screen.lineHeight = ImageFromNormalText ("AfpqtM").GetHeight();
+// Lines aligment. Title and Question are always scene centered    
+    screen.align = -1; //-1 --> Center by line, -2 --> Center by block, >=0 --> percentaje of scene width
+    screen.maxWidthLines=0;
+    
+    return screen | global.Screen;
+} | [];
+//-----------------------------------------------------
+Screen.Clear=fun()
+{
+    this.Hide();
+    this.SetTitle("");
+    this.numLines=0;
+    this.SetQuestion("");
+};
+//-----------------------------------------------------
+Screen.SetTitle=fun(title)
+{
+  this.title.text=title;  
+  this.title.sprite=Sprite();
+  
+  local.image=ImageFromTitleText(title);
+  this.title.sprite.SetImage(local.image);
+  
+  this.title.width = local.image.GetWidth();
+  this.title.height = local.image.GetHeight();
+  
+  //     Center the line horizontally
+  this.title.x = this.scene.x + this.scene.width / 2 - this.title.width / 2;
+  this.title.y = this.scene.y ; //
+  
+  this.title.sprite.SetPosition(this.title.x,this.title.y,0);
+};
+//-----------------------------------------------------
+Screen.SetQuestion=fun(question)
+{
+  this.question.text=question;  
+  this.question.sprite=Sprite();
+  
+  local.image=ImageFromQuestionText(question);
+  this.question.sprite.SetImage(local.image);
+  
+  local.width = local.image.GetWidth ();
+  local.height = local.image.GetHeight ();
+
+//     Center the line horizontally
+  this.question.x = this.scene.x + this.scene.width / 2 - local.width / 2;
+  this.question.y = this.scene.y + this.scene.height   ;
+  
+  this.question.sprite.SetPosition(this.question.x,this.question.y,0);
+};
+//-----------------------------------------------------
+Screen.RecalculateMaxWidthLines=fun(width)
+{
+  this.maxWidthLines = Math.Max( width , this.maxWidthLines);
+  //this.title.sprite.SetOpacity(0);
+  for(i=0;i<this.numLines;i++)
+    this.lines[i].sprite.SetX(this.scene.x + this.scene.width/2 - this.maxWidthLines/2);
+};
+//-----------------------------------------------------
+Screen.AddLine=fun(text,big)
+{
+  this.lines[this.numLines].text=text;
+  
+  this.lines[this.numLines].sprite=Sprite();
+  
+  if(big)
+    local.image=ImageFromBigText(text);
+  else
+    local.image=ImageFromNormalText(text);
+
+  this.lines[this.numLines].sprite.SetImage(local.image);
+  
+  local.width = local.image.GetWidth();
+  local.height = local.image.GetHeight();
+  
+//     Center the line horizontally
+  if(this.align == -1)
+  {
+    this.lines[this.numLines].x = this.scene.x + this.scene.width / 2 - local.width / 2;
+  }
+  else
+  {
+    if(this.align >= 0)
+    {
+// Positive aligment       
+	this.lines[this.numLines].x = this.scene.x + (this.align * Window.RatioY());
+    }
+  }	
+
+// y-pos for first line = this.scene y pos + title height + our height
+// y-pos for rest lines = previous line y pos + our height
+  if(this.numLines == 0)
+  {
+    this.lines[this.numLines].y = this.scene.y + this.title.height + local.height;
+  }
+  else
+  {
+    this.lines[this.numLines].y = this.lines[this.numLines-1].y + local.height;
+  }
+    
+  this.lines[this.numLines].sprite.SetPosition(this.lines[this.numLines].x,this.lines[this.numLines].y,10);
+  
+  this.numLines++;
+
+// Block aligment. Maximun line width centered is used as margin for all lines.  
+  if(this.align == -2)
+  {
+    this.RecalculateMaxWidthLines(local.width);
+  }
+};  
+//-----------------------------------------------------
+Screen.Hide=fun()
+{
+  local.i=0;
+  this.title.sprite.SetOpacity(0);
+  for(i=0;i<this.numLines;i++)
+    this.lines[i].sprite.SetOpacity(0);
+  this.question.sprite.SetOpacity(0);
+};
+//-----------------------------------------------------
+Screen.Show=fun()
+{
+  this.title.sprite.SetOpacity(1);
+  for(i=0;i<this.numLines;i++)
+    this.lines[i].sprite.SetOpacity(1);
+  this.question.sprite.SetOpacity(1);
+};
+//-----------------------------------------------------
+Screen.LeftAlign=fun(margin)
+{
+  // on % of scene width
+  this.align=margin;
+};
+
+//-----------------------------------------------------
+Application = fun()
+{
+// public:
+  local.app.Logo = [];
+  local.app.ProgressBar = [];
+  local.app.Background = [];
+// private:
+  local.app.screens = [];
+  local.app.scene = [];
+  local.app.numScreens = 0;
+  local.app.actualScreen = NULL;
+  local.app.ratioX = 1;
+  local.app.ratioY = 1;
+  return local.app | global.Application;
+} | [];
+  
+//-----------------------------------------------------
+Application.SetRatio=fun(x,y)
+{
+  this.ratioX = x;
+  this.ratioY = y;
+};
+
+//-----------------------------------------------------
+Application.SetScene=fun(x,y,width,height)
+{
+  this.scene = Scene(x,y,width,height);
+};
+
+//-----------------------------------------------------
+Application.RatioX=fun()
+{
+  return this.ratioX;
+};
+
+//-----------------------------------------------------
+Application.RatioY=fun()
+{
+  return this.ratioY;
+};
+//-----------------------------------------------------
+Application.Refresh=fun()
+{
+  if(this.Logo)
+    this.Logo.Refresh();
+
+  if(this.ProgressBar)
+    this.ProgressBar.Refresh();
+};
+//-----------------------------------------------------
+Application.SearchScreen=fun(id)
+{
+    local.Result=NULL;
+    local.i = 0;
+    for(i=0 ;i<this.numScreens;i++)
+    {
+	if(this.screens[i].id == id)
+	{
+	  local.Result = this.screens[i];
+	  break;
+	}
+    }
+  return local.Result;
+};
+//-----------------------------------------------------
+Application.AddScreen=fun(id)
+{   
+    local.Result = this.SearchScreen(id);
+    if(! Result )
+    {
+      Result = Screen(id,this.scene);
+      this.screens[this.numScreens++] = Result;
+    }
+
+    this.actualScreen = Result;
+    return Result;
+};
+//-----------------------------------------------------
+Application.Hide=fun()
+{
+    for(i=0 ;i<this.numScreens;i++)
+    {
+	this.screens[i].Hide();
+    }
+    this.ProgressBar.Hide();
+// Logo is not affected by Application Hide    
+};
+//-----------------------------------------------------
+Application.Show=fun()
+{
+    this.actualScreen.Show();
+// Application Shown don't  show neither ProgresBar or Logo
+// ProgressBar will be showed when plymouth --system-update 
+// is executed
+// You can show and hide Logo sending logo.show or logo.hide
+// message    
+};
+//-----------------------------------------------------
+Application.Clear=fun()
+{
+	this.actualScreen.Clear();
+};
+//-----------------------------------------------------
+Application.LeftAlign=fun(margin)
+{
+	this.actualScreen.LeftAlign(margin);
+};
+//-----------------------------------------------------
+Application.SetTitle=fun(title)
+{
+	this.actualScreen.SetTitle(title);
+};
+//-----------------------------------------------------
+Application.AddLine=fun(text,big)
+{
+	this.actualScreen.AddLine(text,big);
+};
+//-----------------------------------------------------
+Application.SetQuestion=fun(question)
+{
+	this.actualScreen.SetQuestion(question);
+};
+//-----------------------------Background------------------------
+Background = fun(filename) 
+{
+    local.bg.image = Image(filename).Scale(Window.GetWidth(),Window.GetHeight());
+    local.bg.sprite = Sprite(local.bg.image);
+    local.bg.sprite.SetX(0);
+    local.bg.sprite.SetY(0);
+    local.bg.sprite.SetZ(-1000);
+    
+    return local.bg | global.Background;
+    
+} | [];
+
+//----------------------------ProgressBar-------------------------
+ProgressBar=fun( x,y,z,filenameBox,filenameBody,filenameHead,filenameTail) 
+{
+  
+    if( ! z)  z = 4;
+    if( ! x)  x = 0;
+    if( ! y)  y = 0;
+
+    if(! filenameBody || !filenameBox)
+      return;
+    
+    if(!filenameHead)
+      filenameHead = filenameBody;
+    
+    if(!filenameTail)
+      filenameTail = filenameBody;
+
+
+  local.progressbar.actualProgress = -1;  
+
+  local.progressbar.Box.image = Image(filenameBox);
+  local.progressbar.Box.size = local.progressbar.Box.image.GetWidth();
+  local.progressbar.Box.sprite = Sprite(local.progressbar.Box.image);
+  local.progressbar.Box.sprite.SetOpacity(0);
+
+  if(x == -1) // Centered
+    local.progressbar.x = Window.GetX() + Window.GetWidth()/2 - local.progressbar.Box.image.GetWidth()/2;
+  else // absolute
+    local.progressbar.x = x;
+    
+  if(y == -1) // Centered
+    local.progressbar.y = Window.GetY() + Window.GetHeight()/2 - local.progressbar.Box.image.GetHeight()/2;
+  else // absolute
+    local.progressbar.y = y;
+
+  local.progressbar.Box.z = z;
+  local.progressbar.Box.sprite.SetPosition(local.progressbar.x, local.progressbar.y, local.progressbar.Box.z);
+
+    
+  local.progressbar.Progress.Head.image = Image(filenameHead);
+  local.progressbar.Progress.Head.size = local.progressbar.Progress.Head.image.GetWidth();
+  local.progressbar.Progress.Head.sprite = Sprite(local.progressbar.Progress.Head.image);
+  local.progressbar.Progress.Head.sprite.SetOpacity(0);
+  
+  local.progressbar.Progress.Body.image = Image(filenameBody);
+  local.progressbar.Progress.Body.size = local.progressbar.Progress.Body.image.GetWidth();
+  local.progressbar.Progress.Body.sprites = [];
+
+  local.progressbar.Progress.Tail.image = Image(filenameTail);
+  local.progressbar.Progress.Tail.size = local.progressbar.Progress.Tail.image.GetWidth();
+  local.progressbar.Progress.Tail.sprite = Sprite(local.progressbar.Progress.Tail.image);
+  local.progressbar.Progress.Tail.sprite.SetOpacity(0);
+      
+  local.progressbar.Progress.z = z+1 ;
+
+  local.progressbar.Progress.Tail.sprite.SetPosition(local.progressbar.x, local.progressbar.y, local.progressbar.Progress.z);
+  
+
+  return local.progressbar | global.ProgressBar;
+  
+} | [];
+
+//-----------------------------------------------------
+ProgressBar.SetProgress=fun(progress)
+{
+  if (progress != this.actualProgress)
+  {
+    local.targetSize = this.Box.size * progress / 100;
+    
+    local.bodies = Math.Max(0,Math.Int( ( targetSize - this.Progress.Tail.size - this.Progress.Head.size ) / this.Progress.Body.size ));
+
+     
+    local.i = bodies;
+    
+    for(i = bodies ; this.Progress.Body.sprites[i] ; i++)
+	this.Progress.Body.sprites[i] = NULL; // mark end of hash
+    
+    local.i = 0;
+    for(i=0; i < bodies;i++)
+    {
+      this.Progress.Body.sprites[i] = Sprite(this.Progress.Body.image);
+      this.Progress.Body.sprites[i].SetOpacity(0);
+      
+      this.Progress.Body.sprites[i].SetPosition(this.x + this.Progress.Tail.size+ this.Progress.Body.size * i,	this.y, this.Progress.z);
+    }
+ 
+    this.Progress.Head.sprite.SetPosition(this.x + this.Progress.Tail.size + this.Progress.Body.size * bodies, this.y, this.Progress.z);
+  }
+
+  this.Show();
+
+};
+//-----------------------------------------------------
+ProgressBar.Hide=fun()
+{
+    this.Box.sprite.SetOpacity(0);
+    this.Progress.Head.sprite.SetOpacity(0);
+    this.Progress.Tail.sprite.SetOpacity(0);
+    for(local.i=0; this.Progress.Body.sprites[i] ; i++)
+      this.Progress.Body.sprites[i].SetOpacity(0);
+    
+    this.actualProgress = -1;
+    
+};
+//-----------------------------------------------------
+ProgressBar.Show=fun()
+{
+    this.Box.sprite.SetOpacity(1);
+    this.Progress.Head.sprite.SetOpacity(1);
+    this.Progress.Tail.sprite.SetOpacity(1);
+    for(local.i=0 ; this.Progress.Body.sprites[i] ; i++)
+      this.Progress.Body.sprites[i].SetOpacity(1);
+};
+//----------------- Logo------------------------------------
+Logo = fun(filename,x,y) 
+{
+    local.logo.Flash=[];
+    local.logo.image = Image(filename);
+    local.logo.sprite = Sprite(local.logo.image);
+    
+    if(x == -1) //center
+      x = Window.GetWidth()/2 - local.logo.image.GetWidth()/2 ;
+    if(y == -1) //center
+      y = Window.GetHeight()/2;- local.logo.image.GetHeight()/2 ;
+   
+    local.logo.sprite.SetPosition(x,y,2);
+  
+    
+   return local.logo | global.Logo;
+} | [];
+//-----------------------------------------------------
+Logo.SetOpacity=fun(opacity)
+{
+   this.sprite.SetOpacity (opacity);
+};
+//-----------------------------------------------------
+Logo.Show=fun()
+{
+    this.Stop();
+    this.SetOpacity(1);
+};
+//-----------------------------------------------------
+Logo.Hide=fun()
+{
+    this.Stop();
+    this.SetOpacity(0);
+};
+//-----------------------------------------------------
+Logo.Animate=fun()
+{
+  if( this.Flash )
+      this.Flash.angle = 0 ;
+};
+//-----------------------------------------------------
+Logo.Stop=fun()
+{
+  if( this.Flash )
+      this.Flash.angle = -1 ;
+};
+//-----------------------------------------------------
+Logo.SetFlash=fun(minOpacity,freq)
+{
+      this.Flash.angle = 0 ;
+      this.Flash.minOpacity = minOpacity;
+      this.Flash.freq = freq;
+};
+//-----------------------------------------------------
+Logo.Refresh=fun()
+{
+
+  if(this.Flash && this.Flash.angle >= 0)
+  {
+// Flashing the Logo. It's supposed this function is executed each refresh (50 times each second)
+        this.Flash.angle += ((2 * 3.14) / 50) * this.Flash.freq;
+        local.opacity = (Math.Cos(this.Flash.angle) + 1) / 2;
+        opacity *= 1 - this.Flash.minOpacity;
+        opacity += this.Flash.minOpacity;
+        this.SetOpacity(opacity);
+  }
+};
+
+//-------------------------------------------------------------------------
+//------------------------ Plymouth hooks ---------------------------------
+//-------------------------------------------------------------------------
+  
+//---------------------------- Display password --------------------------
+fun root_mounted_callback()
+{
+}
+// Not used here
+// Plymouth.SetRootMountedFunction(display_password_callback);
+//---------------------------- Display password ---------------------------
+fun display_password_callback (prompt, bullets)
+{
+}
+// Not used here
+// Plymouth.SetDisplayPasswordFunction(display_password_callback);
+//---------------------------- Display Question---------------------------
+fun display_question_callback (prompt, content)
+{
+}
+// Not used here
+// Plymouth.SetDisplayQuestionFunction(display_question_callback);
+
+//----------------------------------------------------------------------
+fun refresh_callback ()
+{
+  MyApp.Refresh();
+}
+Plymouth.SetRefreshFunction (refresh_callback);
+
+// ...................restore normal display .............................
+fun display_normal_callback ()
+{
+  MyApp.Hide();
+}
+Plymouth.SetDisplayNormalFunction(display_normal_callback);
+
+//---------------------------- Progress Bar ----------------------------
+// This hook don't work for me
+// Plymouth.SetBootProgressFunction(progress_callback);
+
+// Old plymouth don't use this interface
+//Plymouth.SetSystemUpdateFunction(system_update_callback);
+
+// So, I implemented my progress interface
+
+//------------------------------- Quit --------------------------------
+fun quit_callback ()
+{
+  MyApp.Hide();
+  MyApp.Logo.Show(1);
+}
+Plymouth.SetQuitFunction(quit_callback);
+
+//--------------------------- Keyboard --------------------------------
+fun fkeyboard(key)
+{
+//  Debug("Key = "+key);
+}
+Plymouth.SetKeyboardInputFunction(fkeyboard);
+//------------------------ Status Callback ------------------------------
+// The status callback is used here for adding screens to screen container. 
+// Status name now is the screen name id
+// If screen is not exist, a new window is created and the new screen 
+// is the actual screen
+// If screen exist, no screen is created and screen is the actual screen.
+fun update_status(st)
+{
+  global.status = st;
+
+  MyApp.AddScreen(st);
+}
+Plymouth.SetUpdateStatusFunction(update_status);
+
+// --------------------------- Message callback-------------
+// The old message callback now is used to send commands to screen container
+// the message is formated as "command:parameters"
+// if no command, parameters is used to add a line to container's actual screen.
+//
+fun message_callback (message)
+{
+    if (!message || (message == ""))
+    {
+      MyApp.Clear();
+      return;
+    }
+    local.substring = "leftAlign:";
+    local.ssposition = StringString(message, local.substring);
+    if (local.ssposition != NULL)
+    {
+	message = StringCopy (message, local.ssposition + StringLength(local.substring), NULL);
+	MyApp.LeftAlign(StringToInteger(message));
+	return;
+    }
+
+    local.substring = "logo.animate:";
+    local.ssposition = StringString(message, local.substring);
+    if (local.ssposition != NULL)
+    {
+	MyApp.Logo.Animate();
+	return;
+    }
+
+    local.substring = "logo.show:";
+    local.ssposition = StringString(message, local.substring);
+    if (local.ssposition != NULL)
+    {
+	MyApp.Logo.Show();
+	return;
+    }
+
+    local.substring = "logo.hide:";
+    local.ssposition = StringString(message, local.substring);
+    if (local.ssposition != NULL)
+    {
+	MyApp.Logo.Hide();
+	return;
+    }
+        
+    local.substring = "progress.set:";
+    local.ssposition = StringString(message, local.substring);
+    if (local.ssposition != NULL)
+    {
+	message = StringCopy (message, local.ssposition + StringLength(local.substring), NULL);
+	MyApp.ProgressBar.SetProgress(StringToInteger(message));
+	return;
+    }
+    
+    local.substring = "progress.hide:";
+    local.ssposition = StringString(message, local.substring);
+    if (local.ssposition != NULL)
+    {
+	MyApp.ProgressBar.Hide();
+	return;
+    }
+    
+    local.substring = "show:";
+    local.ssposition = StringString(message, local.substring);
+    if (local.ssposition != NULL)
+    {
+	MyApp.Show();
+	return;
+    }
+
+    local.substring = "hide:";
+    local.ssposition = StringString(message, local.substring);
+    if (local.ssposition != NULL)
+    {
+	MyApp.Hide();
+	return;
+    }
+
+    local.substring = "title:";
+    local.ssposition = StringString(message, local.substring);
+    if (local.ssposition != NULL)
+    {
+	message = StringCopy (message, local.ssposition + StringLength(local.substring), NULL);
+	MyApp.SetTitle(message);
+	return;
+    }
+
+    local.substring = "question:";
+    local.ssposition = StringString(message, local.substring);
+    if (local.ssposition != NULL)
+    {
+	message = StringCopy (message, local.ssposition + StringLength(local.substring), NULL);
+	MyApp.SetQuestion(message);
+	return;
+    }
+
+    local.substring = "big:";
+    local.ssposition = StringString(message, local.substring);
+    if (local.ssposition != NULL)
+    {
+	message = StringCopy (message, local.ssposition + StringLength(local.substring), NULL);
+	MyApp.AddLine(message,1);
+	return;
+    }
+        
+    MyApp.AddLine(message);
+}
+Plymouth.SetMessageFunction (message_callback);
+
+
+//----------------------------------------------------------------------
+//------------------------- Script Configuration -----------------------
+//----------------------------------------------------------------------
+// --------------------------------- Style ---------------------------------- 
+// This Font palette are used for print text and background 
+global.palette = [];
+palette.background.top = Font(1, 1, 1); // used as only color
+palette.background.bottom = palette.background.top;
+palette.text.normal = Font(1, 0, 0,1,"Sans 12");
+palette.text.title = Font(0, 1, 1,1,"Sans 20");
+palette.text.question = Font(0, 0, 1,1,"Sans 24");
+palette.text.big= Font(1, 0, 1,1,"Sans 40");
+
+// --------------------------------- Window ---------------------------------- 
+// Apply palette defined colors to background if you don't want set a image
+Window.ApplyBackgroundColors();
+
+//-------------------- The Application Object ------------------------------
+
+MyApp = Application();
+
+//---------------------------- Ratio -----------------------------------
+// It's better for me  think on percentage of screen, so for diferent
+// monitor resolutions all text are printed on same relative position
+// If you want other scale for text positioning you can change those 
+// values
+MyApp.SetRatio(Window.GetWidth() / 100, Window.GetHeight() / 100);
+
+//---------------------------- scene -----------------------------------
+// The scene is the box where the title, texts and question are printed on pixel units
+MyApp.SetScene( 13.5 * MyApp.RatioX(),   
+                50   * MyApp.RatioY(),   
+                86.5 * MyApp.RatioX(),   
+		27   * MyApp.RatioY());  
+
+MyApp.Background = Background("background.png");
+
+MyApp.Logo = Logo("logo.png",50 * MyApp.RatioX(),40*MyApp.RatioY());
+MyApp.Logo.SetFlash(0.1,0.2);
+
+# Bee bar MyApp.ProgressBar = ProgressBar(40 * MyApp.RatioX(),66 * MyApp.RatioY(),6,"beeBox.png","beeBody.png","beeHead.png","beeTail.png");
+MyApp.ProgressBar = ProgressBar(40 * MyApp.RatioX(),66 * MyApp.RatioY(),6,"pbblueBox.png","pbblueBody.png","pbblueHead.png","pbblueTail.png");
+
+
+
